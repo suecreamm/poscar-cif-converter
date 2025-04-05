@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POSCAR ↔ CIF Converter</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 font-sans">
+  <div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">POSCAR ↔ CIF Converter</h1>
+    
+    <div class="flex border-b border-gray-200">
+      <div class="tab active py-2 px-4 border-b-2 border-blue-500 cursor-pointer font-medium text-blue-600" data-tab="text-tab">Text Input</div>
+      <div class="tab py-2 px-4 cursor-pointer text-gray-600 hover:text-gray-800" data-tab="file-tab">File Upload</div>
+    </div>
+    
+    <div id="text-tab" class="tab-content active bg-white border border-gray-200 rounded-b-lg p-4 mt-1">
+      <textarea id="inputText" class="w-full h-48 p-2 border border-gray-300 rounded-md font-mono text-sm mb-4" placeholder="Paste your POSCAR or CIF content here"></textarea>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button id="convertToCIF" class="bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-md transition">POSCAR → CIF</button>
+        <button id="convertToPOSCAR" class="bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-md transition">CIF → POSCAR</button>
+        <button id="downloadText" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition">Download</button>
+      </div>
+      <h3 class="text-lg font-medium text-gray-700 mb-2">Output:</h3>
+      <textarea id="outputText" class="w-full h-48 p-2 border border-gray-300 rounded-md font-mono text-sm bg-gray-50" readonly></textarea>
+    </div>
+    
+    <div id="file-tab" class="tab-content hidden bg-white border border-gray-200 rounded-b-lg p-4 mt-1">
+      <div class="mb-6">
+        <label for="fileUpload" class="inline-block bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md cursor-pointer transition">Select Files</label>
+        <input type="file" id="fileUpload" class="hidden" accept=".poscar,.vasp,.cif" multiple>
+        <span id="status" class="ml-3 text-gray-600">Loading modules...</span>
+      </div>
+      
+      <div id="fileList" class="space-y-3 mb-6"></div>
+      
+      <div class="flex flex-wrap gap-2">
+        <button id="convertAllToCIF" class="bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-md transition">Convert All to CIF</button>
+        <button id="convertAllToPOSCAR" class="bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-md transition">Convert All to POSCAR</button>
+        <button id="downloadAll" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition">Download All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Python code as a string for Pyodide -->
+  <script id="pythonCode" type="text/plain" src="python/converter.py"></script>
+
+  <!-- JavaScript Modules -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
