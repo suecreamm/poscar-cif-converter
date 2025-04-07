@@ -1,4 +1,3 @@
-# Import required libraries
 import math
 
 # Utility functions
@@ -116,44 +115,100 @@ def cif_to_poscar(cif):
     if title.startswith("data_"):
         title = title[5:]
     
-    a = b = c = 1
-    alpha = beta = gamma = 90
+    # Initialize variables for cell parameters
+    a = b = c = 1.0
+    alpha = beta = gamma = 90.0
+    
+    # Variables for atom parsing
     atom_lines = []
     reading_atoms = False
+    column_indices = {}
     
+    # Parse the CIF file line by line
     for line in lines:
-        if "_cell_length_a" in line:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+            
+        # Parse cell parameters
+        if "*cell*length_a" in line or "_cell_length_a" in line:
             a = float(line.split()[-1])
-        elif "_cell_length_b" in line:
+        elif "*cell*length_b" in line or "_cell_length_b" in line:
             b = float(line.split()[-1])
-        elif "_cell_length_c" in line:
+        elif "*cell*length_c" in line or "_cell_length_c" in line:
             c = float(line.split()[-1])
-        elif line.strip().startswith("loop_"):
+        elif "*cell*angle_alpha" in line or "_cell_angle_alpha" in line:
+            alpha = float(line.split()[-1])
+        elif "*cell*angle_beta" in line or "_cell_angle_beta" in line:
+            beta = float(line.split()[-1])
+        elif "*cell*angle_gamma" in line or "_cell_angle_gamma" in line:
+            gamma = float(line.split()[-1])
+        
+        # Check for the beginning of the atom site loop
+        elif "loop_" in line:
             reading_atoms = False
-        elif "_atom_site_fract_z" in line:
+            column_indices = {}
+        
+        # Identify atom site column headers
+        elif "*atom*site_" in line or "_atom_site_" in line:
             reading_atoms = True
-            atom_lines = []
-        elif reading_atoms and line.strip() and not line.strip().startswith("_"):
-            atom_lines.append(line.strip())
-
+            if "type_symbol" in line:
+                column_indices['type'] = len(column_indices)
+            elif "label" in line:
+                column_indices['label'] = len(column_indices)
+            elif "fract_x" in line:
+                column_indices['x'] = len(column_indices)
+            elif "fract_y" in line:
+                column_indices['y'] = len(column_indices)
+            elif "fract_z" in line:
+                column_indices['z'] = len(column_indices)
+        
+        # Parse atom lines if in the atom block and not a header
+        elif reading_atoms and not line.startswith("*") and not line.startswith("_"):
+            tokens = line.split()
+            if len(tokens) >= max(column_indices.values()) + 1:
+                atom_lines.append(tokens)
+    
+    # Process atom data
     species = {}
     coords = []
-    for line in atom_lines:
-        tokens = line.split()
-        label = tokens[0]
-        sym = ''.join(filter(str.isalpha, label))
+    
+    for tokens in atom_lines:
+        # Determine the atom type - prefer type_symbol if available, otherwise extract from label
+        if 'type' in column_indices:
+            sym = tokens[column_indices['type']]
+        else:
+            # Extract element symbol from label (assume first characters are the element)
+            label = tokens[column_indices['label']]
+            sym = ''.join(filter(str.isalpha, label))
+        
+        # Count atoms of this type
         species[sym] = species.get(sym, 0) + 1
-        coords.append([float(x) for x in tokens[1:4]])
-
+        
+        # Extract coordinates
+        x = float(tokens[column_indices['x']])
+        y = float(tokens[column_indices['y']])
+        z = float(tokens[column_indices['z']])
+        coords.append([x, y, z])
+    
+    # Create POSCAR content
     poscar = f"{title}\n1.0\n"
+    
+    # Convert cell parameters to lattice vectors (simple orthogonal case)
+    # For non-orthogonal cells, would need to calculate vectors from a,b,c,alpha,beta,gamma
     poscar += f"{a:.6f} 0.0 0.0\n"
     poscar += f"0.0 {b:.6f} 0.0\n"
     poscar += f"0.0 0.0 {c:.6f}\n"
+    
+    # Add atom types and counts
     poscar += " ".join(species.keys()) + "\n"
     poscar += " ".join(str(v) for v in species.values()) + "\n"
+    
+    # Add coordinates
     poscar += "Direct\n"
     for c in coords:
         poscar += f"{c[0]:.6f} {c[1]:.6f} {c[2]:.6f}\n"
+    
     return poscar
 
 # Define which functions should be available when imported
