@@ -1,42 +1,13 @@
 import math
+import re
 
-# Utility functions
 def vector_norm(v):
-    """
-    Calculate the Euclidean norm of a vector
-    
-    Args:
-        v (list): Vector coordinates
-        
-    Returns:
-        float: The magnitude of the vector
-    """
     return math.sqrt(sum(x**2 for x in v))
 
 def dot_product(v1, v2):
-    """
-    Calculate the dot product of two vectors
-    
-    Args:
-        v1 (list): First vector
-        v2 (list): Second vector
-        
-    Returns:
-        float: Dot product value
-    """
     return sum(x*y for x, y in zip(v1, v2))
 
 def angle_between(v1, v2):
-    """
-    Calculate the angle between two vectors in degrees
-    
-    Args:
-        v1 (list): First vector
-        v2 (list): Second vector
-        
-    Returns:
-        float: Angle in degrees
-    """
     dot = dot_product(v1, v2)
     norm1 = vector_norm(v1)
     norm2 = vector_norm(v2)
@@ -45,15 +16,6 @@ def angle_between(v1, v2):
     return math.degrees(math.acos(cos_angle))
 
 def poscar_to_cif(poscar):
-    """
-    Convert POSCAR format to CIF format
-    
-    Args:
-        poscar (str): Content of POSCAR file
-        
-    Returns:
-        str: Converted CIF content
-    """
     lines = poscar.strip().splitlines()
     title = lines[0]
     scale = float(lines[1].strip())
@@ -74,7 +36,6 @@ def poscar_to_cif(poscar):
     coords = [list(map(float, lines[i].split()[:3])) for i in range(coord_start, coord_start + sum(atom_counts))]
 
     cif_lines = []
-    # Use title without data_ prefix as requested
     cif_lines.append(f"{title.replace(' ', '_')}")
     cif_lines.append("_symmetry_space_group_name_H-M   'P 1'")
     cif_lines.append("_symmetry_Int_Tables_number      1")
@@ -100,116 +61,106 @@ def poscar_to_cif(poscar):
     return "\n".join(cif_lines)
 
 def cif_to_poscar(cif):
-    """
-    Convert CIF format to POSCAR format
-    
-    Args:
-        cif (str): Content of CIF file
-        
-    Returns:
-        str: Converted POSCAR content
-    """
     lines = cif.strip().splitlines()
-    # Extract title, handling both cases (with or without data_ prefix)
+    
     title = lines[0]
     if title.startswith("data_"):
         title = title[5:]
     
-    # Initialize variables for cell parameters
     a = b = c = 1.0
     alpha = beta = gamma = 90.0
     
-    # Variables for atom parsing
-    atom_lines = []
-    reading_atoms = False
-    column_indices = {}
+    atoms_data = []
+    in_loop = False
+    columns = []
     
-    # Parse the CIF file line by line
     for line in lines:
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-            
-        # Parse cell parameters
-        if "*cell*length_a" in line or "_cell_length_a" in line:
+        
+        if re.search(r'[_*]cell[_*]length_a', line):
             a = float(line.split()[-1])
-        elif "*cell*length_b" in line or "_cell_length_b" in line:
+        elif re.search(r'[_*]cell[_*]length_b', line):
             b = float(line.split()[-1])
-        elif "*cell*length_c" in line or "_cell_length_c" in line:
+        elif re.search(r'[_*]cell[_*]length_c', line):
             c = float(line.split()[-1])
-        elif "*cell*angle_alpha" in line or "_cell_angle_alpha" in line:
+        elif re.search(r'[_*]cell[_*]angle_alpha', line):
             alpha = float(line.split()[-1])
-        elif "*cell*angle_beta" in line or "_cell_angle_beta" in line:
+        elif re.search(r'[_*]cell[_*]angle_beta', line):
             beta = float(line.split()[-1])
-        elif "*cell*angle_gamma" in line or "_cell_angle_gamma" in line:
+        elif re.search(r'[_*]cell[_*]angle_gamma', line):
             gamma = float(line.split()[-1])
         
-        # Check for the beginning of the atom site loop
-        elif "loop_" in line:
-            reading_atoms = False
-            column_indices = {}
+        elif line.startswith("loop_"):
+            in_loop = True
+            columns = []
+            continue
         
-        # Identify atom site column headers
-        elif "*atom*site_" in line or "_atom_site_" in line:
-            reading_atoms = True
-            if "type_symbol" in line:
-                column_indices['type'] = len(column_indices)
-            elif "label" in line:
-                column_indices['label'] = len(column_indices)
-            elif "fract_x" in line:
-                column_indices['x'] = len(column_indices)
-            elif "fract_y" in line:
-                column_indices['y'] = len(column_indices)
-            elif "fract_z" in line:
-                column_indices['z'] = len(column_indices)
+        elif in_loop and (line.startswith("_") or line.startswith("*")):
+            columns.append(line)
         
-        # Parse atom lines if in the atom block and not a header
-        elif reading_atoms and not line.startswith("*") and not line.startswith("_"):
-            tokens = line.split()
-            if len(tokens) >= max(column_indices.values()) + 1:
-                atom_lines.append(tokens)
+        elif in_loop and not (line.startswith("_") or line.startswith("*") or line.startswith("loop_")):
+            values = line.split()
+            if len(values) >= 4:
+                atoms_data.append(values)
     
-    # Process atom data
+    type_idx = -1
+    x_idx = -1
+    y_idx = -1
+    z_idx = -1
+    
+    for i, col in enumerate(columns):
+        if "type_symbol" in col:
+            type_idx = i
+        elif "fract_x" in col:
+            x_idx = i
+        elif "fract_y" in col:
+            y_idx = i
+        elif "fract_z" in col:
+            z_idx = i
+    
+    label_idx = -1
+    if type_idx == -1:
+        for i, col in enumerate(columns):
+            if "label" in col:
+                label_idx = i
+                break
+    
     species = {}
     coords = []
     
-    for tokens in atom_lines:
-        # Determine the atom type - prefer type_symbol if available, otherwise extract from label
-        if 'type' in column_indices:
-            sym = tokens[column_indices['type']]
+    for data in atoms_data:
+        if type_idx != -1 and type_idx < len(data):
+            element = data[type_idx]
+        elif label_idx != -1 and label_idx < len(data):
+            element = ''.join(c for c in data[label_idx] if not c.isdigit())
         else:
-            # Extract element symbol from label (assume first characters are the element)
-            label = tokens[column_indices['label']]
-            sym = ''.join(filter(str.isalpha, label))
+            continue
         
-        # Count atoms of this type
-        species[sym] = species.get(sym, 0) + 1
-        
-        # Extract coordinates
-        x = float(tokens[column_indices['x']])
-        y = float(tokens[column_indices['y']])
-        z = float(tokens[column_indices['z']])
-        coords.append([x, y, z])
+        if x_idx != -1 and y_idx != -1 and z_idx != -1 and x_idx < len(data) and y_idx < len(data) and z_idx < len(data):
+            try:
+                x = float(data[x_idx])
+                y = float(data[y_idx])
+                z = float(data[z_idx])
+                coords.append([x, y, z])
+                species[element] = species.get(element, 0) + 1
+            except ValueError:
+                continue
     
-    # Create POSCAR content
     poscar = f"{title}\n1.0\n"
     
-    # Convert cell parameters to lattice vectors (simple orthogonal case)
-    # For non-orthogonal cells, would need to calculate vectors from a,b,c,alpha,beta,gamma
     poscar += f"{a:.6f} 0.0 0.0\n"
     poscar += f"0.0 {b:.6f} 0.0\n"
     poscar += f"0.0 0.0 {c:.6f}\n"
     
-    # Add atom types and counts
     poscar += " ".join(species.keys()) + "\n"
     poscar += " ".join(str(v) for v in species.values()) + "\n"
     
-    # Add coordinates
     poscar += "Direct\n"
-    for c in coords:
-        poscar += f"{c[0]:.6f} {c[1]:.6f} {c[2]:.6f}\n"
+    for coord in coords:
+        poscar += f"{coord[0]:.6f} {coord[1]:.6f} {coord[2]:.6f}\n"
     
     return poscar
 
-# Define which functions should be available when imported
 __all__ = ['poscar_to_cif', 'cif_to_poscar', 'vector_norm', 'dot_product', 'angle_between']
